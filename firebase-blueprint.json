@@ -1,0 +1,904 @@
+{
+  "entities": {
+    "StockItem": {
+      "title": "Stock Item",
+      "description": "A digital gaming account or file stock item listed for buyer purchase or inquiry.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Display title of the stock item."
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "Short reference code for buyer inquiry and order tracking."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["CODM ACCOUNT", "CODM&MLBB FILES"],
+          "description": "Primary catalog category."
+        },
+        "accountGroup": {
+          "type": "string",
+          "enum": ["Clean", "Not Clean", "N/A"],
+          "description": "Sub-group for CODM ACCOUNT items indicating bind cleanliness."
+        },
+        "fileType": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Optional sub-label for CODM&MLBB FILES items."
+        },
+        "priceLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "Formatted price string or inquiry label."
+        },
+        "pricePhp": {
+          "type": "number",
+          "description": "Numeric PHP unit price used for instant wallet balance purchases."
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "description": "Stock status label (e.g. In Stock, Low Stock, Out of Stock, Restocking Soon, Sold, or custom)."
+        },
+        "stockCount": {
+          "type": "number",
+          "description": "Available quantity (1 for one-time-buy CODM ACCOUNT, stock-based count for CODM&MLBB FILES)."
+        },
+        "bindSummary": {
+          "type": "string",
+          "maxLength": 140,
+          "description": "Short binding or compatibility summary."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Full item details and buyer notes."
+        },
+        "specifications": {
+          "type": "array",
+          "description": "Up to 12 key-value product specification entries ({ label, value })."
+        },
+        "highlights": {
+          "type": "array",
+          "description": "List of up to 12 concise bullet highlights."
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 160000,
+          "description": "Primary thumbnail path, HTTPS URL, or compressed image data URL."
+        },
+        "galleryImages": {
+          "type": "array",
+          "description": "Up to 7 detail photos for the item showcase gallery."
+        },
+        "featured": {
+          "type": "boolean",
+          "description": "Whether the item is highlighted at the top of the catalog."
+        },
+        "autoDelivery": {
+          "type": "boolean",
+          "description": "Whether instant automatic delivery from deliveryVault is configured for this product."
+        },
+        "nextDeliveryIndex": {
+          "type": "number",
+          "description": "Sequential cursor tracking the next available deliveryVault unit index."
+        },
+        "lastOrderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Order ID of the latest verified balance purchase that decremented stock."
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the store owner who created this item."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp."
+        }
+      },
+      "required": [
+        "title",
+        "code",
+        "category",
+        "accountGroup",
+        "fileType",
+        "priceLabel",
+        "status",
+        "stockCount",
+        "bindSummary",
+        "description",
+        "highlights",
+        "imageUrl",
+        "galleryImages",
+        "featured",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserProfile": {
+      "title": "User Profile & Wallet",
+      "description": "Authenticated customer account with PHP wallet balance.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 24,
+          "description": "Normalized lowercase username for user:pass members."
+        },
+        "contactEmail": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Optional buyer Gmail/contact email."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "role": {
+          "type": "string",
+          "enum": ["buyer", "admin"]
+        },
+        "balance": {
+          "type": "number",
+          "description": "Available PHP wallet balance (>= 0)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "role",
+        "balance",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UsernameReservation": {
+      "title": "Username Reservation",
+      "description": "Unique lowercase username reservation preventing duplicate buyer accounts.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 24,
+          "pattern": "^[a-z0-9_]{3,24}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "username", "createdAt"]
+    },
+    "TopUpRequest": {
+      "title": "GCash Manual Top-Up Request",
+      "description": "Manual GCash top-up submission awaiting owner verification and balance credit.",
+      "type": "object",
+      "properties": {
+        "requestCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "userName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GCash"]
+        },
+        "amountPhp": {
+          "type": "number"
+        },
+        "referenceNo": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "proofImageUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160000
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Pending", "Approved", "Rejected"]
+        },
+        "adminNote": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "reviewedBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "requestCode",
+        "userId",
+        "userEmail",
+        "userName",
+        "method",
+        "amountPhp",
+        "referenceNo",
+        "proofImageUrl",
+        "status",
+        "adminNote",
+        "reviewedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StoreOrder": {
+      "title": "Wallet Balance Order",
+      "description": "Purchase order paid using an authenticated buyer's PHP wallet balance.",
+      "type": "object",
+      "properties": {
+        "orderCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "userName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "stockId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "stockCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "stockTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "enum": ["CODM ACCOUNT", "CODM&MLBB FILES"]
+        },
+        "quantity": {
+          "type": "number"
+        },
+        "startUnitIndex": {
+          "type": "number",
+          "description": "Starting deliveryVault unit index assigned to this order."
+        },
+        "unitPricePhp": {
+          "type": "number"
+        },
+        "subtotalPhp": {
+          "type": "number",
+          "description": "Pre-voucher subtotal (unitPricePhp * quantity)."
+        },
+        "voucherCode": {
+          "type": "string",
+          "maxLength": 24,
+          "description": "Applied normalized uppercase voucher code, or empty string."
+        },
+        "discountPhp": {
+          "type": "number",
+          "description": "PHP discount applied from the voucher code."
+        },
+        "totalPhp": {
+          "type": "number"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["Wallet Balance"]
+        },
+        "deliveryStatus": {
+          "type": "string",
+          "enum": ["Processing", "Delivered", "Refunded"]
+        },
+        "deliveryNote": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "orderCode",
+        "userId",
+        "userEmail",
+        "userName",
+        "stockId",
+        "stockCode",
+        "stockTitle",
+        "category",
+        "quantity",
+        "unitPricePhp",
+        "totalPhp",
+        "paymentMethod",
+        "deliveryStatus",
+        "deliveryNote",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CustomerInquiry": {
+      "title": "Customer Inquiry",
+      "description": "Buyer inquiry or reservation request submitted through the storefront.",
+      "type": "object",
+      "properties": {
+        "buyerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "contactHandle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "preferredChannel": {
+          "type": "string",
+          "enum": ["Facebook", "Messenger", "Telegram"]
+        },
+        "stockCode": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "stockTitle": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "status": {
+          "type": "string",
+          "enum": ["New", "Replied", "Closed"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "buyerName",
+        "contactHandle",
+        "preferredChannel",
+        "stockCode",
+        "stockTitle",
+        "message",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ReviewItem": {
+      "title": "Customer Review / Vouch",
+      "description": "Verified buyer review and deal proof displayed on the storefront.",
+      "type": "object",
+      "properties": {
+        "buyerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "itemLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "rating": {
+          "type": "number"
+        },
+        "comment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "dealChannel": {
+          "type": "string",
+          "enum": ["Facebook", "Telegram", "Direct"]
+        },
+        "proofImageUrl": {
+          "type": "string",
+          "maxLength": 160000
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "buyerName",
+        "itemLabel",
+        "rating",
+        "comment",
+        "dealChannel",
+        "proofImageUrl",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SocialLink": {
+      "title": "Social Contact Link",
+      "description": "Public seller social contact link for buyer inquiries.",
+      "type": "object",
+      "properties": {
+        "platform": {
+          "type": "string",
+          "enum": ["Facebook", "Messenger", "Telegram", "Discord", "TikTok", "WhatsApp", "Instagram", "Custom"]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "handle": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "sortOrder": {
+          "type": "number"
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "platform",
+        "label",
+        "handle",
+        "url",
+        "sortOrder",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "StoreSettings": {
+      "title": "Storefront Settings",
+      "description": "Editable storefront branding, GCash manual payment details, and buyer notes.",
+      "type": "object",
+      "properties": {
+        "storeName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "accentWord": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "announcementText": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "heroKicker": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "heroTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "heroSubtitle": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "contactHeading": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "contactNote": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "cleanGuide": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "notCleanGuide": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "gcashName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "gcashNumber": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "minTopUpPhp": {
+          "type": "number"
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "storeName",
+        "accentWord",
+        "announcementText",
+        "heroKicker",
+        "heroTitle",
+        "heroSubtitle",
+        "contactHeading",
+        "contactNote",
+        "cleanGuide",
+        "notCleanGuide",
+        "updatedBy",
+        "updatedAt"
+      ]
+    },
+    "AdminUser": {
+      "title": "Admin User",
+      "description": "Authorized store owner/admin account record.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"]
+        },
+        "addedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["email", "role", "addedBy", "createdAt"]
+    },
+    "VoucherCode": {
+      "title": "Promo Voucher Code",
+      "description": "Owner-created discount voucher redeemable during wallet balance checkout.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "discountType": {
+          "type": "string",
+          "enum": ["fixed", "percent"]
+        },
+        "discountValue": {
+          "type": "number"
+        },
+        "minOrderPhp": {
+          "type": "number"
+        },
+        "maxUses": {
+          "type": "number"
+        },
+        "usedCount": {
+          "type": "number"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "hasExpiry": {
+          "type": "boolean"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "code",
+        "discountType",
+        "discountValue",
+        "minOrderPhp",
+        "maxUses",
+        "usedCount",
+        "active",
+        "hasExpiry",
+        "expiresAt",
+        "note",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DeliveryVaultItem": {
+      "title": "Automatic Delivery Vault Payload",
+      "description": "Restricted account credentials or download links revealed exclusively to verified buyers with purchase entitlement.",
+      "type": "object",
+      "properties": {
+        "stockId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "unitIndex": {
+          "type": "number",
+          "description": "0-based stock unit slot index inside deliveryVault."
+        },
+        "deliveryType": {
+          "type": "string",
+          "enum": ["link", "credentials"]
+        },
+        "payload": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        },
+        "instructions": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "stockId",
+        "deliveryType",
+        "payload",
+        "instructions",
+        "ownerId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DeliveryEntitlement": {
+      "title": "Buyer Auto-Delivery Entitlement",
+      "description": "Deterministic purchase entitlement unlocking access to purchased deliveryVault unit(s).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "stockId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "unitIndex": {
+          "type": "number",
+          "description": "Unit index unlocked by this entitlement."
+        },
+        "orderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "stockId", "orderId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/stocks/{stockId}": {
+      "schema": { "$ref": "#/entities/StockItem" },
+      "description": "Publicly readable stock listings managed by verified admins, with atomic stock decrement verified for balance orders."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private customer profile & PHP wallet balance. Users create with zero balance; only admins can increase balances."
+    },
+    "/usernames/{username}": {
+      "schema": { "$ref": "#/entities/UsernameReservation" },
+      "description": "Atomic username handle reservation mapping unique usernames to a single buyer UID."
+    },
+    "/topupRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/TopUpRequest" },
+      "description": "Manual GCash top-up requests with payment proof. Buyers create Pending requests; only admins approve/reject."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/StoreOrder" },
+      "description": "Orders paid from wallet balance, verified atomically against stock price, voucher discount, and balance deduction."
+    },
+    "/vouchers/{voucherCode}": {
+      "schema": { "$ref": "#/entities/VoucherCode" },
+      "description": "Owner-created promo voucher codes. Listing is admin-only; buyers may get single typed codes and atomically increment usedCount on checkout."
+    },
+    "/deliveryVault/{stockId}": {
+      "schema": { "$ref": "#/entities/DeliveryVaultItem" },
+      "description": "Private auto-delivery secrets (credentials or file links) readable only by admins or buyers holding /entitlements/{uid}_{stockId}."
+    },
+    "/entitlements/{entitlementId}": {
+      "schema": { "$ref": "#/entities/DeliveryEntitlement" },
+      "description": "Purchase entitlements created atomically alongside paid orders to unlock auto-delivery items."
+    },
+    "/inquiries/{inquiryId}": {
+      "schema": { "$ref": "#/entities/CustomerInquiry" },
+      "description": "Customer inquiry dropbox: visitors create inquiries; reads, status updates, and deletes restricted to verified admins."
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/ReviewItem" },
+      "description": "Publicly readable buyer reviews and deal proofs managed exclusively by verified store admins."
+    },
+    "/socialLinks/{linkId}": {
+      "schema": { "$ref": "#/entities/SocialLink" },
+      "description": "Publicly readable seller social contact links managed exclusively by verified store admins."
+    },
+    "/storeSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/StoreSettings" },
+      "description": "Publicly readable storefront copy, GCash payment details, and guidelines managed by verified admins."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Restricted collection of authorized store admin UIDs."
+    }
+  }
+}

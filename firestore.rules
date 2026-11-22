@@ -1,0 +1,775 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable Global Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    function isBuyerSession() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.firebase.sign_in_provider == 'password'
+      );
+    }
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'keenzowatashi@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Validation Blueprints
+    function isValidStock(data) {
+      return data.keys().hasAll([
+          'title', 'code', 'category', 'accountGroup', 'fileType',
+          'priceLabel', 'status', 'stockCount', 'bindSummary', 'description',
+          'highlights', 'imageUrl', 'galleryImages', 'featured', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'title', 'code', 'category', 'accountGroup', 'fileType',
+          'priceLabel', 'pricePhp', 'status', 'stockCount', 'bindSummary', 'description',
+          'specifications', 'highlights', 'imageUrl', 'galleryImages', 'featured',
+          'autoDelivery', 'nextDeliveryIndex', 'lastOrderId', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.code is string && data.code.size() >= 1 && data.code.size() <= 32
+        && data.category is string && data.category in ['CODM ACCOUNT', 'CODM&MLBB FILES']
+        && data.accountGroup is string && (
+          (data.category == 'CODM ACCOUNT' && data.accountGroup in ['Clean', 'Not Clean']) ||
+          (data.category == 'CODM&MLBB FILES' && data.accountGroup == 'N/A')
+        )
+        && data.fileType is string && data.fileType.size() <= 60
+        && data.priceLabel is string && data.priceLabel.size() >= 1 && data.priceLabel.size() <= 40
+        && (!('pricePhp' in data) || (data.pricePhp is number && data.pricePhp >= 0 && data.pricePhp <= 1000000))
+        && data.status is string && data.status.size() >= 1 && data.status.size() <= 32
+        && data.stockCount is number && data.stockCount >= 0 && data.stockCount <= 99999
+        && data.bindSummary is string && data.bindSummary.size() <= 140
+        && data.description is string && data.description.size() <= 2000
+        && (!('specifications' in data) || (
+          data.specifications is list && data.specifications.size() <= 12
+          && (data.specifications.size() == 0 || (
+            data.specifications[0] is map
+            && data.specifications[0].keys().hasAll(['label', 'value'])
+            && data.specifications[0].keys().hasOnly(['label', 'value'])
+            && data.specifications[0].label is string && data.specifications[0].label.size() <= 40
+            && data.specifications[0].value is string && data.specifications[0].value.size() <= 100
+          ))
+        ))
+        && data.highlights is list && data.highlights.size() <= 12
+        && (data.highlights.size() == 0 || (data.highlights[0] is string && data.highlights[0].size() <= 120))
+        && data.imageUrl is string && data.imageUrl.size() <= 160000
+        && data.galleryImages is list && data.galleryImages.size() <= 7
+        && (data.galleryImages.size() == 0 || (data.galleryImages[0] is string && data.galleryImages[0].size() <= 160000))
+        && data.featured is bool
+        && (!('autoDelivery' in data) || data.autoDelivery is bool)
+        && (!('nextDeliveryIndex' in data) || (data.nextDeliveryIndex is number && data.nextDeliveryIndex >= 0 && data.nextDeliveryIndex <= 999999))
+        && (!('lastOrderId' in data) || isValidId(data.lastOrderId))
+        && data.ownerId is string && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'email', 'displayName', 'role', 'balance', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'email', 'username', 'contactEmail', 'displayName', 'role', 'balance', 'createdAt', 'updatedAt'
+        ])
+        && data.uid is string && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && (!('username' in data) || (data.username is string && data.username.size() <= 24))
+        && (!('contactEmail' in data) || (data.contactEmail is string && data.contactEmail.size() <= 120))
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60
+        && data.role is string && data.role in ['buyer', 'admin']
+        && data.balance is number && data.balance >= 0 && data.balance <= 10000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUsernameReservation(data) {
+      return data.keys().hasAll(['uid', 'username', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'username', 'createdAt'])
+        && data.uid is string && isValidId(data.uid)
+        && data.username is string && data.username.size() >= 3 && data.username.size() <= 24 && data.username.matches('^[a-z0-9_]+$')
+        && data.createdAt is timestamp;
+    }
+
+    function isValidTopUpRequest(data) {
+      return data.keys().hasAll([
+          'requestCode', 'userId', 'userEmail', 'userName', 'method',
+          'amountPhp', 'referenceNo', 'proofImageUrl', 'status', 'adminNote',
+          'reviewedBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'requestCode', 'userId', 'userEmail', 'userName', 'method',
+          'amountPhp', 'referenceNo', 'proofImageUrl', 'status', 'adminNote',
+          'reviewedBy', 'createdAt', 'updatedAt'
+        ])
+        && data.requestCode is string && data.requestCode.size() >= 1 && data.requestCode.size() <= 24
+        && data.userId is string && isValidId(data.userId)
+        && data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 120
+        && data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 60
+        && data.method is string && data.method == 'GCash'
+        && data.amountPhp is number && data.amountPhp >= 50 && data.amountPhp <= 100000
+        && data.referenceNo is string && data.referenceNo.size() <= 60
+        && data.proofImageUrl is string && data.proofImageUrl.size() >= 1 && data.proofImageUrl.size() <= 160000
+        && data.status is string && data.status in ['Pending', 'Approved', 'Rejected']
+        && data.adminNote is string && data.adminNote.size() <= 240
+        && data.reviewedBy is string && data.reviewedBy.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll([
+          'orderCode', 'userId', 'userEmail', 'userName', 'stockId', 'stockCode',
+          'stockTitle', 'category', 'quantity', 'unitPricePhp', 'totalPhp',
+          'paymentMethod', 'deliveryStatus', 'deliveryNote', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'orderCode', 'userId', 'userEmail', 'userName', 'stockId', 'stockCode',
+          'stockTitle', 'category', 'quantity', 'startUnitIndex', 'unitPricePhp', 'subtotalPhp',
+          'voucherCode', 'discountPhp', 'totalPhp',
+          'paymentMethod', 'deliveryStatus', 'deliveryNote', 'createdAt', 'updatedAt'
+        ])
+        && data.orderCode is string && data.orderCode.size() >= 1 && data.orderCode.size() <= 24
+        && data.userId is string && isValidId(data.userId)
+        && data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 120
+        && data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 60
+        && data.stockId is string && isValidId(data.stockId)
+        && data.stockCode is string && data.stockCode.size() >= 1 && data.stockCode.size() <= 32
+        && data.stockTitle is string && data.stockTitle.size() >= 1 && data.stockTitle.size() <= 120
+        && data.category is string && data.category in ['CODM ACCOUNT', 'CODM&MLBB FILES']
+        && data.quantity is number && data.quantity >= 1 && data.quantity <= 100
+        && (!('startUnitIndex' in data) || (data.startUnitIndex is number && data.startUnitIndex >= 0 && data.startUnitIndex <= 999999))
+        && data.unitPricePhp is number && data.unitPricePhp > 0 && data.unitPricePhp <= 1000000
+        && (!('subtotalPhp' in data) || (data.subtotalPhp is number && data.subtotalPhp > 0 && data.subtotalPhp <= 10000000))
+        && (!('voucherCode' in data) || (data.voucherCode is string && data.voucherCode.size() <= 24))
+        && (!('discountPhp' in data) || (data.discountPhp is number && data.discountPhp >= 0 && data.discountPhp <= 10000000))
+        && data.totalPhp is number && data.totalPhp >= 0 && data.totalPhp <= 10000000
+        && data.paymentMethod is string && data.paymentMethod == 'Wallet Balance'
+        && data.deliveryStatus is string && data.deliveryStatus in ['Processing', 'Delivered', 'Refunded']
+        && data.deliveryNote is string && data.deliveryNote.size() <= 1000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidVoucher(data) {
+      return data.keys().hasAll([
+          'code', 'discountType', 'discountValue', 'minOrderPhp', 'maxUses',
+          'usedCount', 'active', 'hasExpiry', 'expiresAt', 'note', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'code', 'discountType', 'discountValue', 'minOrderPhp', 'maxUses',
+          'usedCount', 'active', 'hasExpiry', 'expiresAt', 'note', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.code is string && data.code.size() >= 3 && data.code.size() <= 24 && data.code.matches('^[A-Z0-9_\\-]+$')
+        && data.discountType is string && data.discountType in ['fixed', 'percent']
+        && data.discountValue is number && data.discountValue > 0 && data.discountValue <= 100000
+        && (data.discountType != 'percent' || data.discountValue <= 100)
+        && data.minOrderPhp is number && data.minOrderPhp >= 0 && data.minOrderPhp <= 1000000
+        && data.maxUses is number && data.maxUses >= 1 && data.maxUses <= 100000
+        && data.usedCount is number && data.usedCount >= 0 && data.usedCount <= data.maxUses
+        && data.active is bool
+        && data.hasExpiry is bool
+        && data.expiresAt is timestamp
+        && data.note is string && data.note.size() <= 120
+        && data.ownerId is string && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDeliveryVault(data) {
+      return data.keys().hasAll([
+          'stockId', 'deliveryType', 'payload', 'instructions', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'stockId', 'unitIndex', 'deliveryType', 'payload', 'instructions', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.stockId is string && isValidId(data.stockId)
+        && (!('unitIndex' in data) || (data.unitIndex is number && data.unitIndex >= 0 && data.unitIndex <= 999999))
+        && data.deliveryType is string && data.deliveryType in ['link', 'credentials']
+        && data.payload is string && data.payload.size() >= 1 && data.payload.size() <= 1500
+        && data.instructions is string && data.instructions.size() <= 500
+        && data.ownerId is string && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEntitlement(data) {
+      return data.keys().hasAll(['uid', 'stockId', 'orderId', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'stockId', 'unitIndex', 'orderId', 'createdAt'])
+        && data.uid is string && isValidId(data.uid)
+        && data.stockId is string && isValidId(data.stockId)
+        && (!('unitIndex' in data) || (data.unitIndex is number && data.unitIndex >= 0 && data.unitIndex <= 999999))
+        && data.orderId is string && isValidId(data.orderId)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidOrderVoucherPricing(ord) {
+      return (
+        ((!('voucherCode' in ord) || ord.voucherCode == '')
+          && (!('discountPhp' in ord) || ord.discountPhp == 0)
+          && (!('subtotalPhp' in ord) || (
+            ord.subtotalPhp >= ord.unitPricePhp * ord.quantity - 0.01
+            && ord.subtotalPhp <= ord.unitPricePhp * ord.quantity + 0.01
+          ))
+          && ord.totalPhp >= ord.unitPricePhp * ord.quantity - 0.01
+          && ord.totalPhp <= ord.unitPricePhp * ord.quantity + 0.01)
+        ||
+        ('subtotalPhp' in ord
+          && 'voucherCode' in ord
+          && 'discountPhp' in ord
+          && ord.subtotalPhp >= ord.unitPricePhp * ord.quantity - 0.01
+          && ord.subtotalPhp <= ord.unitPricePhp * ord.quantity + 0.01
+          && ord.voucherCode is string
+          && ord.voucherCode.size() >= 3
+          && ord.voucherCode.size() <= 24
+          && ord.voucherCode.matches('^[A-Z0-9_\\-]+$')
+          && exists(/databases/$(database)/documents/vouchers/$(ord.voucherCode))
+          && get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.active == true
+          && get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.usedCount
+            < get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.maxUses
+          && (!get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.hasExpiry
+            || get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.expiresAt > request.time)
+          && ord.subtotalPhp >= get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.minOrderPhp
+          && ord.discountPhp > 0
+          && ord.discountPhp <= ord.subtotalPhp
+          && (
+            get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.discountType == 'fixed'
+              ? ord.discountPhp <= get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.discountValue + 0.01
+              : ord.discountPhp <= (ord.subtotalPhp * get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.discountValue / 100.0) + 0.02
+          )
+          && ord.totalPhp >= 0
+          && ord.totalPhp >= ord.subtotalPhp - ord.discountPhp - 0.02
+          && ord.totalPhp <= ord.subtotalPhp - ord.discountPhp + 0.02
+          && getAfter(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.usedCount
+            == get(/databases/$(database)/documents/vouchers/$(ord.voucherCode)).data.usedCount + 1)
+      );
+    }
+
+    function isValidInquiry(data) {
+      return data.keys().hasAll([
+          'buyerName', 'contactHandle', 'preferredChannel',
+          'stockCode', 'stockTitle', 'message', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'buyerName', 'contactHandle', 'preferredChannel',
+          'stockCode', 'stockTitle', 'message', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.buyerName is string && data.buyerName.size() >= 1 && data.buyerName.size() <= 60
+        && data.contactHandle is string && data.contactHandle.size() >= 1 && data.contactHandle.size() <= 100
+        && data.preferredChannel is string && data.preferredChannel in ['Facebook', 'Messenger', 'Telegram']
+        && data.stockCode is string && data.stockCode.size() <= 32
+        && data.stockTitle is string && data.stockTitle.size() <= 120
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 600
+        && data.status is string && data.status in ['New', 'Replied', 'Closed']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll([
+          'buyerName', 'itemLabel', 'rating', 'comment', 'dealChannel',
+          'proofImageUrl', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'buyerName', 'itemLabel', 'rating', 'comment', 'dealChannel',
+          'proofImageUrl', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.buyerName is string && data.buyerName.size() >= 1 && data.buyerName.size() <= 60
+        && data.itemLabel is string && data.itemLabel.size() >= 1 && data.itemLabel.size() <= 100
+        && data.rating is number && data.rating >= 1 && data.rating <= 5
+        && data.comment is string && data.comment.size() >= 1 && data.comment.size() <= 500
+        && data.dealChannel is string && data.dealChannel in ['Facebook', 'Telegram', 'Direct']
+        && data.proofImageUrl is string && data.proofImageUrl.size() <= 160000
+        && data.ownerId is string && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSocialLink(data) {
+      return data.keys().hasAll([
+          'platform', 'label', 'handle', 'url', 'sortOrder', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'platform', 'label', 'handle', 'url', 'sortOrder', 'ownerId', 'createdAt', 'updatedAt'
+        ])
+        && data.platform is string
+        && data.platform in ['Facebook', 'Messenger', 'Telegram', 'Discord', 'TikTok', 'WhatsApp', 'Instagram', 'Custom']
+        && data.label is string && data.label.size() >= 1 && data.label.size() <= 60
+        && data.handle is string && data.handle.size() <= 80
+        && data.url is string && data.url.size() >= 1 && data.url.size() <= 500
+        && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 9999
+        && data.ownerId is string && isValidId(data.ownerId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStoreSettings(data) {
+      return data.keys().hasAll([
+          'storeName', 'accentWord', 'announcementText', 'heroKicker',
+          'heroTitle', 'heroSubtitle', 'contactHeading', 'contactNote',
+          'cleanGuide', 'notCleanGuide', 'updatedBy', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'storeName', 'accentWord', 'announcementText', 'heroKicker',
+          'heroTitle', 'heroSubtitle', 'contactHeading', 'contactNote',
+          'cleanGuide', 'notCleanGuide', 'gcashName', 'gcashNumber', 'minTopUpPhp',
+          'updatedBy', 'updatedAt'
+        ])
+        && data.storeName is string && data.storeName.size() >= 1 && data.storeName.size() <= 60
+        && data.accentWord is string && data.accentWord.size() <= 30
+        && data.announcementText is string && data.announcementText.size() <= 200
+        && data.heroKicker is string && data.heroKicker.size() <= 60
+        && data.heroTitle is string && data.heroTitle.size() >= 1 && data.heroTitle.size() <= 120
+        && data.heroSubtitle is string && data.heroSubtitle.size() <= 300
+        && data.contactHeading is string && data.contactHeading.size() <= 100
+        && data.contactNote is string && data.contactNote.size() <= 500
+        && data.cleanGuide is string && data.cleanGuide.size() <= 300
+        && data.notCleanGuide is string && data.notCleanGuide.size() <= 300
+        && (!('gcashName' in data) || (data.gcashName is string && data.gcashName.size() <= 80))
+        && (!('gcashNumber' in data) || (data.gcashNumber is string && data.gcashNumber.size() <= 30))
+        && (!('minTopUpPhp' in data) || (data.minTopUpPhp is number && data.minTopUpPhp >= 50 && data.minTopUpPhp <= 10000))
+        && data.updatedBy is string && isValidId(data.updatedBy)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['email', 'role', 'addedBy', 'createdAt'])
+        && data.keys().hasOnly(['email', 'role', 'addedBy', 'createdAt'])
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && data.role is string && data.role == 'admin'
+        && data.addedBy is string && isValidId(data.addedBy)
+        && data.createdAt is timestamp;
+    }
+
+    // Connection test probe
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // Public Stock Catalog (Admin-only CRUD, plus verified buyer atomic purchase decrement linked 1:1 to order)
+    match /stocks/{stockId} {
+      allow get: if isValidId(stockId);
+      allow list: if true;
+      allow create: if isAdmin()
+        && isValidId(stockId)
+        && isValidStock(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(stockId)
+        && isValidStock(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'code', 'category', 'accountGroup', 'fileType',
+            'priceLabel', 'pricePhp', 'status', 'stockCount', 'bindSummary', 'description',
+            'specifications', 'highlights', 'imageUrl', 'galleryImages', 'featured',
+            'autoDelivery', 'nextDeliveryIndex', 'updatedAt'
+          ]))
+          ||
+          (isBuyerSession()
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'stockCount', 'nextDeliveryIndex', 'status', 'lastOrderId', 'updatedAt'
+            ])
+            && 'lastOrderId' in incoming()
+            && isValidId(incoming().lastOrderId)
+            && 'pricePhp' in existing()
+            && existing().pricePhp is number
+            && existing().pricePhp > 0
+            && existing().stockCount >= 1
+            && incoming().stockCount >= 0
+            && incoming().stockCount < existing().stockCount
+            && (
+              (!('nextDeliveryIndex' in incoming()) && !('nextDeliveryIndex' in existing()))
+              || (
+                'nextDeliveryIndex' in incoming()
+                && (
+                  (!('nextDeliveryIndex' in existing()) && incoming().nextDeliveryIndex == existing().stockCount - incoming().stockCount)
+                  || ('nextDeliveryIndex' in existing() && incoming().nextDeliveryIndex == existing().nextDeliveryIndex + (existing().stockCount - incoming().stockCount))
+                )
+              )
+            )
+            && getAfter(/databases/$(database)/documents/orders/$(incoming().lastOrderId)).data.userId == request.auth.uid
+            && getAfter(/databases/$(database)/documents/orders/$(incoming().lastOrderId)).data.stockId == stockId
+            && getAfter(/databases/$(database)/documents/orders/$(incoming().lastOrderId)).data.quantity
+              == existing().stockCount - incoming().stockCount
+          )
+        );
+      allow delete: if isAdmin() && isValidId(stockId);
+    }
+
+    // Customer Profiles & Wallet Balances (PII protected; non-admins cannot increase balance)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && ((isBuyerSession() && request.auth.uid == userId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isBuyerSession()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUserProfile(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().role == 'buyer'
+        && incoming().balance == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isBuyerSession()
+        && isValidId(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['balance', 'displayName', 'contactEmail', 'role', 'updatedAt']))
+          ||
+          (request.auth.uid == userId
+            && incoming().role == existing().role
+            && (!('username' in existing()) || incoming().username == existing().username)
+            && (
+              incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+              ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['contactEmail', 'updatedAt'])
+              ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'contactEmail', 'updatedAt'])
+              ||
+              (incoming().diff(existing()).affectedKeys().hasOnly(['balance', 'updatedAt'])
+                && incoming().balance >= 0
+                && incoming().balance < existing().balance)
+            )
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Unique Username Reservations (prevents duplicate buyer registrations)
+    match /usernames/{username} {
+      allow get: if isBuyerSession() && isValidId(username);
+      allow list: if isAdmin();
+      allow create: if isBuyerSession()
+        && isValidId(username)
+        && isValidUsernameReservation(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().username == username
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(username);
+    }
+
+    // Manual GCash Top-Up Requests (Owner approval required, min PHP 50)
+    match /topupRequests/{requestId} {
+      allow get: if isValidId(requestId) && ((isBuyerSession() && existing().userId == request.auth.uid) || isAdmin());
+      allow list: if (isBuyerSession() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isBuyerSession()
+        && isValidId(requestId)
+        && isValidTopUpRequest(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().method == 'GCash'
+        && incoming().status == 'Pending'
+        && incoming().adminNote == ''
+        && incoming().reviewedBy == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(requestId)
+        && isValidTopUpRequest(incoming())
+        && incoming().userId == existing().userId
+        && incoming().userEmail == existing().userEmail
+        && incoming().userName == existing().userName
+        && incoming().requestCode == existing().requestCode
+        && incoming().method == existing().method
+        && incoming().amountPhp == existing().amountPhp
+        && incoming().proofImageUrl == existing().proofImageUrl
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'adminNote', 'reviewedBy', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(requestId);
+    }
+
+    // Owner Promo Voucher Codes (No public list; buyer get + atomic checkout increment)
+    match /vouchers/{voucherCode} {
+      allow get: if (isBuyerSession() || isAdmin()) && isValidId(voucherCode);
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(voucherCode)
+        && voucherCode.size() >= 3
+        && voucherCode.size() <= 24
+        && voucherCode.matches('^[A-Z0-9_\\-]+$')
+        && isValidVoucher(incoming())
+        && incoming().code == voucherCode
+        && incoming().usedCount == 0
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(voucherCode)
+        && isValidVoucher(incoming())
+        && incoming().code == existing().code
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'discountType', 'discountValue', 'minOrderPhp', 'maxUses',
+            'active', 'hasExpiry', 'expiresAt', 'note', 'updatedAt'
+          ]))
+          ||
+          (isBuyerSession()
+            && existing().active == true
+            && existing().usedCount < existing().maxUses
+            && (!existing().hasExpiry || existing().expiresAt > request.time)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['usedCount', 'updatedAt'])
+            && incoming().usedCount == existing().usedCount + 1
+          )
+        );
+      allow delete: if isAdmin() && isValidId(voucherCode);
+    }
+
+    // Wallet Balance Purchase Orders (Atomic balance + stock + voucher + auto-delivery verification)
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && ((isBuyerSession() && existing().userId == request.auth.uid) || isAdmin());
+      allow list: if (isBuyerSession() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isBuyerSession()
+        && isValidId(orderId)
+        && isValidOrder(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().paymentMethod == 'Wallet Balance'
+        && incoming().deliveryNote == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && exists(/databases/$(database)/documents/stocks/$(incoming().stockId))
+        && 'pricePhp' in get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data
+        && get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.pricePhp is number
+        && get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.pricePhp > 0
+        && get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.stockCount >= incoming().quantity
+        && incoming().unitPricePhp == get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.pricePhp
+        && isValidOrderVoucherPricing(incoming())
+        && (
+          incoming().deliveryStatus == 'Processing'
+          || (
+            incoming().deliveryStatus == 'Delivered'
+            && 'autoDelivery' in get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data
+            && get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.autoDelivery == true
+            && (
+              (
+                !('startUnitIndex' in incoming())
+                && existsAfter(/databases/$(database)/documents/entitlements/$(request.auth.uid + '_' + incoming().stockId))
+              )
+              || (
+                'startUnitIndex' in incoming()
+                && (
+                  (!('nextDeliveryIndex' in get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data) && incoming().startUnitIndex == 0)
+                  || ('nextDeliveryIndex' in get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data && incoming().startUnitIndex == get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.nextDeliveryIndex)
+                )
+                && getAfter(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.nextDeliveryIndex == incoming().startUnitIndex + incoming().quantity
+                && existsAfter(/databases/$(database)/documents/entitlements/$(request.auth.uid + '_' + incoming().stockId + '__' + string(int(incoming().startUnitIndex))))
+              )
+            )
+          )
+        )
+        && (
+          incoming().totalPhp == 0
+          || (
+            getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance
+              >= get(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance - incoming().totalPhp - 0.01
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance
+              <= get(/databases/$(database)/documents/users/$(request.auth.uid)).data.balance - incoming().totalPhp + 0.01
+          )
+        )
+        && getAfter(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.stockCount
+          == get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.stockCount - incoming().quantity;
+      allow update: if isAdmin()
+        && isValidId(orderId)
+        && isValidOrder(incoming())
+        && incoming().userId == existing().userId
+        && incoming().stockId == existing().stockId
+        && incoming().totalPhp == existing().totalPhp
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['deliveryStatus', 'deliveryNote', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // Automatic Delivery Secret Vault (Admin + Entitled Buyers Only)
+    match /deliveryVault/{vaultId} {
+      allow get: if isValidId(vaultId) && (
+        isAdmin() ||
+        (isBuyerSession() && exists(/databases/$(database)/documents/entitlements/$(request.auth.uid + '_' + vaultId)))
+      );
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(vaultId)
+        && isValidDeliveryVault(incoming())
+        && (vaultId == incoming().stockId || ('unitIndex' in incoming() && vaultId == incoming().stockId + '__' + string(int(incoming().unitIndex))))
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(vaultId)
+        && isValidDeliveryVault(incoming())
+        && incoming().stockId == existing().stockId
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'deliveryType', 'payload', 'instructions', 'unitIndex', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(vaultId);
+    }
+
+    // Deterministic Buyer Delivery Entitlements (${uid}_${stockId} or ${uid}_${stockId}__${unitIndex})
+    match /entitlements/{entitlementId} {
+      allow get: if isValidId(entitlementId) && (
+        isAdmin() ||
+        (isBuyerSession() && (
+          (resource == null
+            && entitlementId.size() > request.auth.uid.size() + 1
+            && entitlementId[0 : request.auth.uid.size() + 1] == request.auth.uid + '_')
+          || (resource != null && existing().uid == request.auth.uid)
+        ))
+      );
+      allow list: if (isBuyerSession() && resource.data.uid == request.auth.uid) || isAdmin();
+      allow create: if isBuyerSession()
+        && isValidId(entitlementId)
+        && isValidEntitlement(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/stocks/$(incoming().stockId))
+        && 'autoDelivery' in get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data
+        && get(/databases/$(database)/documents/stocks/$(incoming().stockId)).data.autoDelivery == true
+        && getAfter(/databases/$(database)/documents/orders/$(incoming().orderId)).data.userId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/orders/$(incoming().orderId)).data.stockId == incoming().stockId
+        && (
+          (!('unitIndex' in incoming()) && entitlementId == request.auth.uid + '_' + incoming().stockId)
+          || (
+            'unitIndex' in incoming()
+            && entitlementId == request.auth.uid + '_' + incoming().stockId + '__' + string(int(incoming().unitIndex))
+            && 'startUnitIndex' in getAfter(/databases/$(database)/documents/orders/$(incoming().orderId)).data
+            && incoming().unitIndex >= getAfter(/databases/$(database)/documents/orders/$(incoming().orderId)).data.startUnitIndex
+            && incoming().unitIndex < getAfter(/databases/$(database)/documents/orders/$(incoming().orderId)).data.startUnitIndex + getAfter(/databases/$(database)/documents/orders/$(incoming().orderId)).data.quantity
+          )
+        );
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(entitlementId);
+    }
+
+    // Customer Inquiries Dropbox (Public validated create; Admin-only read/update/delete)
+    match /inquiries/{inquiryId} {
+      allow get: if isAdmin() && isValidId(inquiryId);
+      allow list: if isAdmin();
+      allow create: if isValidId(inquiryId)
+        && isValidInquiry(incoming())
+        && incoming().status == 'New'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(inquiryId)
+        && isValidInquiry(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(inquiryId);
+    }
+
+    // Public Buyer Reviews / Vouches (Admin-only writes)
+    match /reviews/{reviewId} {
+      allow get: if isValidId(reviewId);
+      allow list: if true;
+      allow create: if isAdmin()
+        && isValidId(reviewId)
+        && isValidReview(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(reviewId)
+        && isValidReview(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'buyerName', 'itemLabel', 'rating', 'comment', 'dealChannel', 'proofImageUrl', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(reviewId);
+    }
+
+    // Public Seller Social Links (Admin-only writes)
+    match /socialLinks/{linkId} {
+      allow get: if isValidId(linkId);
+      allow list: if true;
+      allow create: if isAdmin()
+        && isValidId(linkId)
+        && isValidSocialLink(incoming())
+        && incoming().ownerId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(linkId)
+        && isValidSocialLink(incoming())
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'platform', 'label', 'handle', 'url', 'sortOrder', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(linkId);
+    }
+
+    // Storefront Branding, GCash Payment Details & Guidelines (Admin-only writes)
+    match /storeSettings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create: if isAdmin()
+        && isValidId(settingId)
+        && isValidStoreSettings(incoming())
+        && incoming().updatedBy == request.auth.uid
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(settingId)
+        && isValidStoreSettings(incoming())
+        && incoming().updatedBy == request.auth.uid
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'storeName', 'accentWord', 'announcementText', 'heroKicker',
+          'heroTitle', 'heroSubtitle', 'contactHeading', 'contactNote',
+          'cleanGuide', 'notCleanGuide', 'gcashName', 'gcashNumber', 'minTopUpPhp',
+          'updatedBy', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(settingId);
+    }
+
+    // Restricted Admin Registry (PII protected)
+    match /admins/{userId} {
+      allow get: if isAdmin() && isValidId(userId);
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(userId)
+        && isValidAdminUser(incoming())
+        && incoming().addedBy == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+  }
+}

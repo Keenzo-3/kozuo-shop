@@ -1,0 +1,8 @@
+{
+  "name": "Kozuo Store — Stock Showcase",
+  "description": "Kozuo Store live stock catalog for CODM Clean & Not Clean accounts and CODM & MLBB files. Direct inquiry via Facebook and Telegram.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

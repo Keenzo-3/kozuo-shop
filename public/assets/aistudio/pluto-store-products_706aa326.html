@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>Products — PLUTO STORE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<div class="announce-bar"><div class="announce-inner"><span class="a-dot"></span><marquee scrollamount="3">🎮 CODM Accounts &nbsp;•&nbsp; ⚡ MLBB Files &nbsp;•&nbsp; 🔥 CODM Scripts &nbsp;•&nbsp; 💳 GCash Ready &nbsp;•&nbsp; 📦 Check Status Before Buying</marquee></div></div>
+
+<header id="header">
+  <div class="header-inner">
+    <a href="index.html" class="brand"><div class="brand-icon">P</div><span class="brand-name">PLUTO<em>STORE</em></span></a>
+    <nav class="nav-links">
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="products.html" class="nav-link active">Products</a>
+      <a href="index.html#how-it-works" class="nav-link">How It Works</a>
+      <a href="index.html#contact" class="nav-link">Support</a>
+    </nav>
+    <div class="nav-actions">
+      <div class="balance-pill" id="balancePill" onclick="showPage('wallet')" style="display:none;"><i class="fa-solid fa-wallet"></i><span>₱<span id="headerBal">0.00</span></span></div>
+      <button class="nav-btn ghost" onclick="toggleMobileMenu()"><i class="fa-solid fa-bars"></i></button>
+      <a href="login.html" class="nav-btn" id="loginBtn">Sign In</a>
+      <button class="nav-btn primary" id="logoutBtn" style="display:none;" onclick="logout()">Logout</button>
+    </div>
+  </div>
+  <div class="mobile-nav" id="mobileNav">
+    <a href="index.html">Home</a><a href="products.html">Products</a>
+    <a href="login.html" id="mobileLoginBtn">Sign In</a>
+    <button onclick="logout()" id="mobileLogoutBtn" style="display:none;">Logout</button>
+  </div>
+</header>
+
+<main class="page-main">
+  <div class="products-page-head">
+    <div class="section-kicker"><span></span> ALL PRODUCTS</div>
+    <h1>Browse Products</h1>
+    <div class="product-filters">
+      <button class="filter-btn active" data-cat="all">All</button>
+      <button class="filter-btn" data-cat="codm-account">CODM Accounts</button>
+      <button class="filter-btn" data-cat="mlbb-files">MLBB Files</button>
+      <button class="filter-btn" data-cat="codm-files">CODM Files</button>
+    </div>
+    <div class="search-bar">
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <input type="text" id="searchInput" placeholder="Search products..." oninput="filterProducts()"/>
+    </div>
+  </div>
+  <div class="products-grid" id="allProductsGrid"></div>
+</main>
+
+<!-- PRODUCT MODAL -->
+<div class="modal-backdrop" id="productModal" onclick="closeProductModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeProductModal()"><i class="fa-solid fa-xmark"></i></button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<!-- BUY CONFIRM -->
+<div class="modal-backdrop" id="buyModal" onclick="closeBuyModal()">
+  <div class="modal-box small" onclick="event.stopPropagation()">
+    <div id="buyModalContent"></div>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand"><div class="brand"><div class="brand-icon">P</div><span class="brand-name">PLUTO<em>STORE</em></span></div><p>Premium digital gaming products.</p></div>
+    <div class="footer-links"><h4>Navigation</h4><a href="index.html">Home</a><a href="products.html">Products</a><a href="login.html">Login</a></div>
+  </div>
+  <div class="footer-bottom"><span>© 2026 Pluto Store.</span></div>
+</footer>
+
+<nav class="bottom-nav">
+  <a href="index.html" class="bn-item"><i class="fa-solid fa-house"></i><span>Home</span></a>
+  <a href="products.html" class="bn-item active"><i class="fa-solid fa-bag-shopping"></i><span>Products</span></a>
+  <a href="dashboard.html" class="bn-item"><i class="fa-solid fa-key"></i><span>My Keys</span></a>
+  <a href="login.html" class="bn-item"><i class="fa-solid fa-user"></i><span>Account</span></a>
+</nav>
+
+<script src="app.js"></script>
+<script>renderAllProducts();</script>
+</body>
+</html>
