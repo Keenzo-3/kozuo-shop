@@ -2,6 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  # Firebase web config values are intentionally public and get bundled into the client by Vite.
+  SECRETS_SCAN_OMIT_KEYS = "VITE_FIREBASE_API_KEY"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

@@ -18,8 +18,29 @@ import {
   writeBatch,
   type Firestore,
 } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
 import { BLUEPRINT_LIMITS, usernameToAuthEmail } from '../types/store';
+
+const env = import.meta.env;
+
+const firebaseConfig = {
+  apiKey: env.VITE_FIREBASE_API_KEY as string | undefined,
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
+  projectId: env.VITE_FIREBASE_PROJECT_ID as string | undefined,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID as string | undefined,
+  appId: env.VITE_FIREBASE_APP_ID as string | undefined,
+  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID as string | undefined,
+};
+
+// Optional: named Firestore database. Falls back to the default database when unset.
+const firestoreDatabaseId =
+  (env.VITE_FIREBASE_FIRESTORE_DATABASE_ID as string | undefined) || '(default)';
+
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  console.error(
+    'Firebase configuration is missing. Set the VITE_FIREBASE_* environment variables.'
+  );
+}
 
 const app = initializeApp(firebaseConfig);
 
@@ -30,10 +51,10 @@ function createFirestoreDb(): Firestore {
       {
         experimentalForceLongPolling: true,
       },
-      firebaseConfig.firestoreDatabaseId
+      firestoreDatabaseId
     );
   } catch {
-    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    return getFirestore(app, firestoreDatabaseId);
   }
 }
 
